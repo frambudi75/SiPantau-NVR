@@ -1,0 +1,15 @@
+/.vscode/
+/.idea/
+
+# runtime-generated
+/recordings/
+/streams/
+/scratch/
+
+# OS junk
+Thumbs.db
+Desktop.ini
+
+# logs
+*.log
+
