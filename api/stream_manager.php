@@ -16,6 +16,7 @@ function isProcessRunning($name, $cmdLineSubstring) {
             }
         }
     } else {
+        $output = [];
         $cmd = "ps aux | grep -v grep | grep " . escapeshellarg($cmdLineSubstring);
         exec($cmd, $output);
         return !empty($output);
@@ -23,8 +24,22 @@ function isProcessRunning($name, $cmdLineSubstring) {
     return false;
 }
 
+function killStreamByCameraId($cameraId) {
+    $marker = "cam_$cameraId";
+    if (PHP_OS_FAMILY === 'Windows') {
+        return; // handled by stream_control.php
+    }
+    // Kill any existing ffmpeg for this camera
+    exec("pkill -f " . escapeshellarg("ffmpeg.*$marker") . " 2>/dev/null");
+    // Wait a moment for process to die
+    usleep(500000); // 0.5 second
+}
+
 function startStream($cameraId, $rtspUrl) {
     global $pdo;
+
+    // IMPORTANT: Kill any existing stream for this camera first to prevent conflicts
+    killStreamByCameraId($cameraId);
 
     // Check if recording is enabled for this camera
     $stmt = $pdo->prepare("SELECT is_recording FROM cameras WHERE id = ?");
@@ -34,6 +49,10 @@ function startStream($cameraId, $rtspUrl) {
 
     $outputDir = STREAMS_DIR . "cam_$cameraId/";
     if (!is_dir($outputDir)) mkdir($outputDir, 0777, true);
+    
+    // Clean up stale HLS files before starting
+    array_map('unlink', glob($outputDir . "*.ts") ?: []);
+    @unlink($outputDir . "index.m3u8");
 
     $hlsFile = $outputDir . "index.m3u8";
     $hlsSegmentPattern = $outputDir . "seg_%05d.ts";
@@ -43,20 +62,20 @@ function startStream($cameraId, $rtspUrl) {
 
     // Optimized FFmpeg command:
     // -c:v copy: passthrough video (no transcoding = low CPU, no quality loss)
-    // -fflags nobuffer: reduces latency by not buffering packets
+    // -fflags nobuffer+genpts: reduces latency, generates proper timestamps
     // -probesize 1M: enough for 1080p stream analysis
-    $cmd = "\"$ffmpegPath\" " .
+    $cmd = "$ffmpegPath " .
            "-hide_banner -loglevel warning " .
            "-rtsp_transport tcp " .
            "-fflags nobuffer+genpts -flags low_delay " .
            "-probesize 1000000 -analyzeduration 1000000 " .
-           "-i \"$rtspUrl\" " .
-           "-metadata comment=\"$camMarker\" " .
+           "-i " . escapeshellarg($rtspUrl) . " " .
+           "-metadata comment=" . escapeshellarg($camMarker) . " " .
            "-map 0:v:0 -map 0:a? -c:v copy -c:a aac -ar 44100 " .
            // Output #1: HLS for live view
            "-f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments+independent_segments -hls_allow_cache 0 " .
-           "-hls_segment_filename \"$hlsSegmentPattern\" " .
-           "\"$hlsFile\"";
+           "-hls_segment_filename " . escapeshellarg($hlsSegmentPattern) . " " .
+           escapeshellarg($hlsFile);
 
     // Output #2: segmented MP4 recording (Only if enabled)
     if ($isRecording) {
@@ -67,7 +86,7 @@ function startStream($cameraId, $rtspUrl) {
                 "-segment_format mp4 " .
                 "-segment_format_options movflags=+frag_keyframe+empty_moov " .
                 "-reset_timestamps 1 -strftime 1 " .
-                "\"$recordDir%Y-%m-%d_%H-%M-%S.mp4\"";
+                escapeshellarg("$recordDir%Y-%m-%d_%H-%M-%S.mp4");
     }
     
     if (PHP_OS_FAMILY === 'Windows') {
