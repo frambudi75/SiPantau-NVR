@@ -47,8 +47,7 @@ function startStream($cameraId, $rtspUrl) {
     // -probesize/analyzeduration: speeds up stream startup
     $cmd = "\"$ffmpegPath\" " .
            "-hide_banner -loglevel warning " .
-           "-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 5 " .
-           "-rtsp_transport tcp -timeout 10000000 " .
+           "-rtsp_transport tcp -stimeout 10000000 " .
            "-fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 200000 " .
            "-i \"$rtspUrl\" " .
            "-metadata comment=\"$camMarker\" " .
