@@ -89,7 +89,7 @@ def start_stream(cam):
         rec_pattern = os.path.join(record_dir, "%Y-%m-%d_%H-%M-%S.mp4")
         # 3600 seconds = 1 hour segments
         cmd.extend([
-            "-c:v", "copy", "-c:a", "aac", "-ar", "44100",
+            "-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "aac", "-ar", "44100",
             "-f", "segment", "-segment_time", "3600",
             "-segment_format", "mp4",
             "-segment_format_options", "movflags=+faststart",
