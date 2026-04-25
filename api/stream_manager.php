@@ -42,18 +42,19 @@ function startStream($cameraId, $rtspUrl) {
     $camMarker = "cam_$cameraId";
 
     // Optimized FFmpeg command:
+    // -c:v copy: passthrough video (no transcoding = low CPU, no quality loss)
     // -fflags nobuffer: reduces latency by not buffering packets
-    // -flags low_delay: tells ffmpeg to expect low delay
-    // -probesize/analyzeduration: speeds up stream startup
+    // -probesize 1M: enough for 1080p stream analysis
     $cmd = "\"$ffmpegPath\" " .
            "-hide_banner -loglevel warning " .
            "-rtsp_transport tcp " .
-           "-fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 200000 " .
+           "-fflags nobuffer+genpts -flags low_delay " .
+           "-probesize 1000000 -analyzeduration 1000000 " .
            "-i \"$rtspUrl\" " .
            "-metadata comment=\"$camMarker\" " .
-           "-map 0:v:0 -map 0:a? -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2000k -c:a aac -ar 44100 " .
+           "-map 0:v:0 -map 0:a? -c:v copy -c:a aac -ar 44100 " .
            // Output #1: HLS for live view
-           "-f hls -hls_time 1 -hls_list_size 3 -hls_flags delete_segments+independent_segments -hls_allow_cache 0 " .
+           "-f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments+independent_segments -hls_allow_cache 0 " .
            "-hls_segment_filename \"$hlsSegmentPattern\" " .
            "\"$hlsFile\"";
 
