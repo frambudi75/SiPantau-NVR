@@ -23,19 +23,11 @@ chmod 666 /var/www/html/error.log /var/www/html/ffmpeg_error.log
 PHP_BIN=$(which php 2>/dev/null || echo "/usr/local/bin/php")
 echo "[entrypoint] PHP binary: $PHP_BIN"
 
-# Install cron if available, set up watchdog to run every 2 minutes
-if command -v crontab > /dev/null 2>&1; then
-    echo "*/2 * * * * $PHP_BIN /var/www/html/api/watchdog.php >> /var/www/html/ffmpeg_error.log 2>&1" | crontab -
-    cron 2>/dev/null || true
-    echo "[entrypoint] Cron watchdog installed."
-fi
-
-# Auto-start streams on container boot (run in background after Apache starts)
+# Auto-start the new High-Precision Python NVR Daemon
 (
-    sleep 15
-    echo "[entrypoint] Auto-starting camera streams..."
-    $PHP_BIN /var/www/html/api/watchdog.php >> /var/www/html/ffmpeg_error.log 2>&1 || true
-    echo "[entrypoint] Initial stream sync done."
+    sleep 5
+    echo "[entrypoint] Starting Python NVR Daemon..."
+    python3 /var/www/html/engine/daemon.py >> /var/www/html/ffmpeg_error.log 2>&1
 ) &
 
 echo "[entrypoint] Starting Apache..."

@@ -1,8 +1,9 @@
 FROM php:8.2-apache
 
-# Install dependencies: FFmpeg, cron (for watchdog), procps (for ps command), curl (for healthcheck)
+# Install dependencies: FFmpeg, python3 (for new daemon), cron (for legacy watchdog), procps, curl
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    python3 \
     libmariadb-dev \
     cron \
     procps \
