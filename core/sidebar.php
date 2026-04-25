@@ -29,6 +29,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </a>
         </li>
         <li class="nav-item">
+            <a href="storage.php" class="nav-link <?= $current_page == 'storage.php' ? 'active' : '' ?>">
+                <i class="ph ph-hard-drives"></i> Storage
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="profile.php" class="nav-link <?= $current_page == 'profile.php' ? 'active' : '' ?>">
                 <i class="ph ph-user-circle"></i> Profile
             </a>
