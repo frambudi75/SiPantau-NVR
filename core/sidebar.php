@@ -33,6 +33,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="ph ph-user-circle"></i> Profile
             </a>
         </li>
+        <li class="nav-item">
+            <a href="logs.php" class="nav-link <?= $current_page == 'logs.php' ? 'active' : '' ?>">
+                <i class="ph ph-article"></i> System Logs
+            </a>
+        </li>
     </ul>
 
     <!-- Bottom Actions -->

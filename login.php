@@ -83,5 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
     </div>
+    <div style="text-align: center; color: #64748b; font-size: 0.8rem; margin-top: 1rem;">SiPantau v1.2-DOCKER-FIX</div>
 </body>
 </html>

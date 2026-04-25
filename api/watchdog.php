@@ -38,7 +38,7 @@ foreach ($cameras as $cam) {
     $m3u8Fresh = false;
     if (is_file($m3u8)) {
         $age = time() - filemtime($m3u8);
-        $m3u8Fresh = ($age >= 0 && $age <= 12); // should update often with 2s segments
+        $m3u8Fresh = ($age >= 0 && $age <= 30); // increased tolerance for laggy connections
     }
 
     // Determine effective online/offline

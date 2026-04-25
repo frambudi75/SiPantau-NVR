@@ -1,0 +1,51 @@
+services:
+  app:
+    build: .
+    ports:
+      - "2027:80"
+    volumes:
+      - .:/var/www/html
+      - recordings_data:/var/www/html/recordings
+      - streams_data:/var/www/html/streams
+    environment:
+      - DB_HOST=db
+      - DB_NAME=nvr_db
+      - DB_USER=root
+      - DB_PASS=nvr_secure_pass
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/debug_docker.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: nvr_secure_pass
+      MYSQL_DATABASE: nvr_db
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database.sql:/docker-entrypoint-initdb.d/database.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pnvr_secure_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:alpine
+    restart: always
+
+volumes:
+  mysql_data:
+  recordings_data:
+  streams_data:

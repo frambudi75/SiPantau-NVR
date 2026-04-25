@@ -14,6 +14,13 @@ function scanRecordings() {
     $storagePath = rtrim(str_replace('\\', '/', $storagePath), '/') . '/';
 
     $cameraFolders = glob($recordingsDir . 'cam_*', GLOB_ONLYDIR);
+    
+    // 1. Pre-fetch all existing file paths to avoid per-file DB queries
+    $existingFiles = $pdo->query("SELECT file_path FROM recordings")->fetchAll(PDO::FETCH_COLUMN);
+    $existingFilesSet = array_flip($existingFiles);
+
+    // Start transaction for performance
+    $pdo->beginTransaction();
 
     foreach ($cameraFolders as $folder) {
         $camId = str_replace($recordingsDir . 'cam_', '', $folder);
@@ -21,40 +28,35 @@ function scanRecordings() {
 
         foreach ($files as $file) {
             $filename = basename($file);
-            // Path used by the web UI (assumes storage_path is web-accessible under the project root).
-            // If you set storage_path to an absolute/non-web path, playback will need a download/proxy endpoint.
             $filePath = $storagePath . 'cam_' . $camId . '/' . $filename;
             
-            // Extract date from filename (YYYY-MM-DD_HH-II-SS.mp4)
+            // Extract date from filename
             $datePart = str_replace('.mp4', '', $filename);
             $startTime = str_replace('_', ' ', $datePart);
 
-            // Check if already in DB
-            $stmt = $pdo->prepare("SELECT id FROM recordings WHERE file_path = ?");
-            $stmt->execute([$filePath]);
-            
-            if (!$stmt->fetch()) {
-                // Generate Thumbnail
-                $thumbName = str_replace('.mp4', '.jpg', $filename);
-                $thumbPath = $storagePath . 'cam_' . $camId . '/' . $thumbName;
-                $thumbDiskPath = $folder . '/' . $thumbName;
-                
-                $ffmpeg = FFMPEG_PATH;
-                // Take a snapshot at 2 seconds mark
-                if (!file_exists($thumbDiskPath)) {
-                    $thumbCmd = "\"" . $ffmpeg . "\" -i \"" . $file . "\" -ss 00:00:02 -vframes 1 -q:v 2 \"" . $thumbDiskPath . "\" -y";
-                    @exec($thumbCmd);
-                }
+            // Skip if already in DB (fast check via array)
+            if (isset($existingFilesSet[$filePath])) continue;
 
-                // Add to DB
-                $fileSize = filesize($file);
-                $stmt = $pdo->prepare("INSERT INTO recordings (camera_id, filename, file_path, thumbnail_path, start_time, file_size) VALUES (?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$camId, $filename, $filePath, $thumbPath, $startTime, $fileSize]);
-                echo "Indexed new recording & thumbnail: $filename\n";
+            // Generate Thumbnail
+            $thumbName = str_replace('.mp4', '.jpg', $filename);
+            $thumbPath = $storagePath . 'cam_' . $camId . '/' . $thumbName;
+            $thumbDiskPath = $folder . '/' . $thumbName;
+            
+            $ffmpeg = FFMPEG_PATH;
+            if (!file_exists($thumbDiskPath)) {
+                // Optimized thumbnail: faster seek and smaller size
+                $thumbCmd = "\"" . $ffmpeg . "\" -ss 00:00:01 -i \"" . $file . "\" -vframes 1 -q:v 5 -s 320x180 \"" . $thumbDiskPath . "\" -y";
+                @exec($thumbCmd);
             }
+
+            // Add to DB
+            $fileSize = filesize($file);
+            $stmt = $pdo->prepare("INSERT INTO recordings (camera_id, filename, file_path, thumbnail_path, start_time, file_size) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$camId, $filename, $filePath, $thumbPath, $startTime, $fileSize]);
         }
     }
-
+    
+    $pdo->commit();
     // --- DISK SPACE GUARD ---
     $freeDir = RECORDINGS_DIR;
     $minFreeSpace = 5 * 1024 * 1024 * 1024; // 5GB in bytes

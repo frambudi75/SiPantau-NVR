@@ -98,13 +98,13 @@ $cameras = $pdo->query("SELECT * FROM cameras ORDER BY name ASC")->fetchAll();
                             </td>
                             <td>
                                 <div style="display: flex; gap: 10px;">
-                                    <button class="btn" style="background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem;">
-                                        <i class="ph ph-pencil"></i>
+                                    <button class="btn btn-action btn-edit" title="Edit Camera">
+                                        <i class="ph-bold ph-pencil-simple"></i>
                                     </button>
-                                    <a href="?delete=<?= $cam['id'] ?>" class="btn" 
+                                    <a href="?delete=<?= $cam['id'] ?>" class="btn btn-action btn-delete" 
                                        onclick="return confirm('Delete this camera?')"
-                                       style="background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 0.4rem 0.8rem;">
-                                        <i class="ph ph-trash"></i>
+                                       title="Delete Camera">
+                                        <i class="ph-bold ph-trash"></i>
                                     </a>
                                 </div>
                             </td>

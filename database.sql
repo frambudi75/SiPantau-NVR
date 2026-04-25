@@ -38,5 +38,18 @@ INSERT IGNORE INTO settings (`key`, `value`) VALUES
 ('storage_path', 'recordings/'),
 ('retention_days', '7'),
 ('ffmpeg_path', 'ffmpeg'),
+('segment_time', '600'),
 ('telegram_bot_token', ''),
 ('telegram_chat_id', '');
+
+-- Table for users
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE,
+    password VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Default Admin: admin / admin123
+INSERT IGNORE INTO users (username, password) VALUES 
+('admin', '$2y$10$iC1CpjbPVLpFx1BcbSTUsOZ52qhELYqHrKyADN/z9DF2UArhZEnPK');

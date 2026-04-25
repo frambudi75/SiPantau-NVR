@@ -103,14 +103,19 @@ $online_cameras = count(array_filter($cameras, fn($c) => $c['status'] == 'online
                                     <p><?= htmlspecialchars($cam['location'] ?: 'Unassigned') ?></p>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
-                                    <button class="btn" style="background: rgba(255,255,255,0.05);" title="Full Screen">
-                                        <i class="ph ph-corners-out"></i>
+                                    <button class="btn btn-action <?= $cam['is_recording'] ? 'btn-delete' : '' ?>" 
+                                            title="<?= $cam['is_recording'] ? 'Stop Recording' : 'Start Recording' ?>" 
+                                            onclick="toggleRecord(<?= (int)$cam['id'] ?>)">
+                                        <i class="ph-bold ph-record"></i>
                                     </button>
-                                    <button class="btn" style="background: rgba(255,255,255,0.05);" title="Restart Stream" onclick="restartStream(<?= (int)$cam['id'] ?>)">
-                                        <i class="ph ph-arrow-counter-clockwise"></i>
+                                    <button class="btn btn-action" title="Full Screen">
+                                        <i class="ph-bold ph-corners-out"></i>
                                     </button>
-                                    <button class="btn" style="background: rgba(255,255,255,0.05); color: var(--danger);" title="Stop Stream" onclick="stopStream(<?= (int)$cam['id'] ?>)">
-                                        <i class="ph ph-stop"></i>
+                                    <button class="btn btn-action btn-edit" title="Restart Stream" onclick="restartStream(<?= (int)$cam['id'] ?>)">
+                                        <i class="ph-bold ph-arrow-counter-clockwise"></i>
+                                    </button>
+                                    <button class="btn btn-action btn-delete" title="Stop Stream" onclick="stopStream(<?= (int)$cam['id'] ?>)">
+                                        <i class="ph-bold ph-stop"></i>
                                     </button>
                                 </div>
                             </div>
@@ -233,21 +238,57 @@ $online_cameras = count(array_filter($cameras, fn($c) => $c['status'] == 'online
         document.addEventListener('DOMContentLoaded', () => {
             <?php foreach ($cameras as $cam): 
                 $stream_file = "streams/cam_" . $cam['id'] . "/index.m3u8";
-                if ($cam['status'] == 'online' && file_exists($stream_file)): ?>
-                    initializeStream(<?= $cam['id'] ?>, '<?= $stream_file ?>');
-                <?php endif; ?>
+            ?>
+                initializeStream(<?= $cam['id'] ?>, '<?= $stream_file ?>?t=' + Date.now());
             <?php endforeach; ?>
         });
 
         function initializeStream(id, url) {
             const video = document.getElementById('video-' + id);
+            const card = document.getElementById('cam-' + id);
+            const fallback = card.querySelector('.video-fallback');
+
             if (Hls.isSupported()) {
-                const hls = new Hls();
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    // Reduce live buffer delay/stutter
+                    liveSyncDurationCount: 2,
+                    liveMaxLatencyDurationCount: 4,
+                    maxBufferLength: 10,
+                    backBufferLength: 30,
+                    maxLiveSyncPlaybackRate: 1.2,
+                    // Retry settings for Docker startup delay
+                    manifestLoadingMaxRetry: 10,
+                    manifestLoadingRetryDelay: 2000,
+                    levelLoadingMaxRetry: 10,
+                    levelLoadingRetryDelay: 2000,
+                    fragLoadingMaxRetry: 10,
+                    fragLoadingRetryDelay: 2000
+                });
                 hls.loadSource(url);
                 hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play();
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.warn(`[Camera ${id}] Fatal HLS error, retrying in 5s...`, data.type);
+                        fallback.style.display = 'flex';
+                        fallback.querySelector('span').textContent = 'Reconnecting...';
+                        hls.destroy();
+                        setTimeout(() => {
+                            initializeStream(id, url.split('?')[0] + '?t=' + Date.now());
+                        }, 5000);
+                    }
+                });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
             }
+
+            video.onplaying = () => {
+                fallback.style.display = 'none';
+            };
         }
 
         function stopStream(cameraId) {
@@ -269,6 +310,16 @@ $online_cameras = count(array_filter($cameras, fn($c) => $c['status'] == 'online
                     setTimeout(() => location.reload(), 800);
                 })
                 .catch(err => alert(err.message || 'Restart failed'));
+        }
+
+        function toggleRecord(cameraId) {
+            fetch('api/stream_control.php?action=toggle_record&camera_id=' + encodeURIComponent(cameraId), { method: 'POST' })
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.ok) throw new Error(res.error || 'Toggle failed');
+                    location.reload();
+                })
+                .catch(err => alert(err.message || 'Toggle failed'));
         }
     </script>
 </body>

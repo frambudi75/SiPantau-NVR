@@ -36,7 +36,7 @@ function stopStreamByCameraId(int $cameraId): int {
 try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
     $cameraId = (int)($_POST['camera_id'] ?? $_GET['camera_id'] ?? 0);
-    if (!in_array($action, ['stop', 'restart'], true) || $cameraId <= 0) {
+    if (!in_array($action, ['stop', 'restart', 'toggle_record'], true) || $cameraId <= 0) {
         http_response_code(400);
         echo json_encode(['ok' => false, 'error' => 'Invalid action or camera_id']);
         exit;
@@ -46,6 +46,28 @@ try {
         $killed = stopStreamByCameraId($cameraId);
         $pdo->prepare("UPDATE cameras SET status='offline' WHERE id=?")->execute([$cameraId]);
         echo json_encode(['ok' => true, 'killed' => $killed]);
+        exit;
+    }
+
+    if ($action === 'toggle_record') {
+        require_once __DIR__ . '/stream_manager.php';
+        stopStreamByCameraId($cameraId);
+        
+        // Toggle the flag in DB
+        $pdo->prepare("UPDATE cameras SET is_recording = 1 - is_recording WHERE id = ?")->execute([$cameraId]);
+        
+        // Restart stream with new settings
+        $stmt = $pdo->prepare("SELECT * FROM cameras WHERE id = ?");
+        $stmt->execute([$cameraId]);
+        $cam = $stmt->fetch();
+        if (!$cam) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Camera not found']);
+            exit;
+        }
+        startStream($cam['id'], $cam['rtsp_url']);
+        
+        echo json_encode(['ok' => true, 'is_recording' => (bool)$cam['is_recording']]);
         exit;
     }
 
