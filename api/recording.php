@@ -30,6 +30,10 @@ function resolveRecordingDiskPath(array $rec): ?string {
 }
 
 function sendFileWithRange(string $path, string $downloadName): void {
+    // Ensure clean output for video streaming
+    @ob_end_clean();
+    set_time_limit(0);
+    
     $size = filesize($path);
     $fh = fopen($path, 'rb');
     if ($fh === false) {
@@ -68,7 +72,7 @@ function sendFileWithRange(string $path, string $downloadName): void {
         header('Content-Length: ' . $length);
 
         fseek($fh, $start);
-        $buf = 8192;
+        $buf = 65536; // 64KB chunks for smoother streaming
         $remaining = $length;
         while ($remaining > 0 && !feof($fh)) {
             $read = ($remaining > $buf) ? $buf : $remaining;

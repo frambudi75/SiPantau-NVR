@@ -82,9 +82,11 @@ function startStream($cameraId, $rtspUrl) {
         $recordDir = RECORDINGS_DIR . "cam_$cameraId/";
         if (!is_dir($recordDir)) mkdir($recordDir, 0777, true);
         
-        $cmd .= " -f segment -segment_time " . (int)SEGMENT_TIME . " " .
+        $segTime = (int)SEGMENT_TIME;
+        $cmd .= " -c:v copy -c:a aac -ar 44100" .
+                " -f segment -segment_time $segTime " .
                 "-segment_format mp4 " .
-                "-segment_format_options movflags=+frag_keyframe+empty_moov " .
+                "-segment_format_options movflags=+faststart " .
                 "-reset_timestamps 1 -strftime 1 " .
                 escapeshellarg("$recordDir%Y-%m-%d_%H-%M-%S.mp4");
     }
