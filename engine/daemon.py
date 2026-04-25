@@ -90,7 +90,7 @@ def start_stream(cam):
         # 3600 seconds = 1 hour segments
         cmd.extend([
             "-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "aac", "-ar", "44100",
-            "-f", "segment", "-segment_time", "3600",
+            "-f", "segment", "-segment_time", "600",
             "-segment_format", "mp4",
             "-segment_format_options", "movflags=+faststart",
             "-reset_timestamps", "1", "-strftime", "1",
