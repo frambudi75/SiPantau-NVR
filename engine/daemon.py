@@ -21,20 +21,23 @@ active_processes = {}
 def log(msg):
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
-def get_cameras():
-    """Fetch camera config via local PHP execution to avoid needing MySQL drivers in Python"""
+def get_config():
+    """Fetch camera config and settings via local PHP execution"""
     php_code = """
     require '/var/www/html/core/config.php';
     $cams = $pdo->query('SELECT id, rtsp_url, is_recording FROM cameras')->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode($cams);
+    echo json_encode([
+        'cameras' => $cams,
+        'segment_time' => SEGMENT_TIME
+    ]);
     """
     try:
         result = subprocess.run(["php", "-r", php_code], capture_output=True, text=True)
         if result.returncode == 0 and result.stdout:
             return json.loads(result.stdout)
     except Exception as e:
-        log(f"Error fetching cameras: {e}")
-    return []
+        log(f"Error fetching config: {e}")
+    return {'cameras': [], 'segment_time': 600}
 
 def cleanup_hls(cam_id):
     """Clean up old HLS files before starting a new stream"""
@@ -55,12 +58,12 @@ def update_camera_status(cam_id, status):
     """
     subprocess.run(["php", "-r", php_code])
 
-def start_stream(cam):
+def start_stream(cam, segment_time):
     cam_id = cam['id']
     rtsp_url = cam['rtsp_url']
     is_recording = bool(int(cam['is_recording']))
     
-    log(f"Starting stream for Camera {cam_id}...")
+    log(f"Starting stream for Camera {cam_id} with segment time {segment_time}s...")
     cleanup_hls(cam_id)
     
     cam_streams_dir = os.path.join(STREAMS_DIR, f"cam_{cam_id}")
@@ -87,10 +90,9 @@ def start_stream(cam):
         os.makedirs(record_dir, exist_ok=True)
         # Using faststart for MP4 ensures instantaneous playback on the web without stuttering
         rec_pattern = os.path.join(record_dir, "%Y-%m-%d_%H-%M-%S.mp4")
-        # 3600 seconds = 1 hour segments
         cmd.extend([
             "-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "aac", "-ar", "44100",
-            "-f", "segment", "-segment_time", "600",
+            "-f", "segment", "-segment_time", str(segment_time),
             "-segment_format", "mp4",
             "-segment_format_options", "movflags=+faststart",
             "-reset_timestamps", "1", "-strftime", "1",
@@ -127,7 +129,10 @@ def main():
     
     while True:
         try:
-            cameras = get_cameras()
+            config_data = get_config()
+            cameras = config_data.get('cameras', [])
+            segment_time = config_data.get('segment_time', 600)
+            
             current_cam_ids = {cam['id'] for cam in cameras}
             
             # 1. Start or Restart Streams
@@ -137,12 +142,12 @@ def main():
                 
                 if process is None:
                     # New stream
-                    start_stream(cam)
+                    start_stream(cam, segment_time)
                 elif process.poll() is not None:
                     # Process died, restart it instantly!
                     log(f"Camera {cam_id} process died (exit code {process.returncode}). Restarting immediately.")
                     update_camera_status(cam_id, 'offline')
-                    start_stream(cam)
+                    start_stream(cam, segment_time)
             
             # 2. Stop streams that were deleted from DB
             deleted_cams = list(set(active_processes.keys()) - current_cam_ids)
