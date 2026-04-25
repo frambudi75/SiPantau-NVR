@@ -15,18 +15,29 @@ function scanRecordings() {
 
     $cameraFolders = glob($recordingsDir . 'cam_*', GLOB_ONLYDIR);
     
-    // 1. Pre-fetch all existing file paths to avoid per-file DB queries
-    $existingFiles = $pdo->query("SELECT file_path FROM recordings")->fetchAll(PDO::FETCH_COLUMN);
-    $existingFilesSet = array_flip($existingFiles);
+    // 1. Pre-fetch all existing file paths with their sizes to avoid per-file DB queries
+    $existingRows = $pdo->query("SELECT id, file_path, file_size FROM recordings")->fetchAll();
+    $existingFilesSet = [];
+    foreach ($existingRows as $row) {
+        $existingFilesSet[$row['file_path']] = $row;
+    }
 
     // Start transaction for performance
     $pdo->beginTransaction();
+
+    // Prepare update statement for file sizes
+    $updateSizeStmt = $pdo->prepare("UPDATE recordings SET file_size = ? WHERE id = ?");
 
     foreach ($cameraFolders as $folder) {
         $camId = str_replace($recordingsDir . 'cam_', '', $folder);
         $files = glob($folder . '/*.mp4');
 
         foreach ($files as $file) {
+            $fileSize = filesize($file);
+            
+            // Skip 0-byte files (dead segments from restarts)
+            if ($fileSize <= 0) continue;
+
             $filename = basename($file);
             $filePath = $storagePath . 'cam_' . $camId . '/' . $filename;
             
@@ -34,8 +45,14 @@ function scanRecordings() {
             $datePart = str_replace('.mp4', '', $filename);
             $startTime = str_replace('_', ' ', $datePart);
 
-            // Skip if already in DB (fast check via array)
-            if (isset($existingFilesSet[$filePath])) continue;
+            // If already in DB, update file_size if it was 0
+            if (isset($existingFilesSet[$filePath])) {
+                $existing = $existingFilesSet[$filePath];
+                if ((int)$existing['file_size'] === 0 && $fileSize > 0) {
+                    $updateSizeStmt->execute([$fileSize, $existing['id']]);
+                }
+                continue;
+            }
 
             // Generate Thumbnail
             $thumbName = str_replace('.mp4', '.jpg', $filename);
@@ -50,7 +67,6 @@ function scanRecordings() {
             }
 
             // Add to DB
-            $fileSize = filesize($file);
             $stmt = $pdo->prepare("INSERT INTO recordings (camera_id, filename, file_path, thumbnail_path, start_time, file_size) VALUES (?, ?, ?, ?, ?, ?)");
             $stmt->execute([$camId, $filename, $filePath, $thumbPath, $startTime, $fileSize]);
         }
